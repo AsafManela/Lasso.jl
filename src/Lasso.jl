@@ -307,10 +307,13 @@ end
 function build_model(X::AbstractMatrix{T}, y::FPVector, d::Normal, l::IdentityLink,
                      lp::LinPred, λminratio::Real, λ::Union{AbstractVector,Function,Nothing},
                      wts::Union{FPVector,Nothing}, offset::Vector, α::Real, nλ::Int,
-                     ω::Union{Vector,Nothing}, intercept::Bool, irls_tol::Real, dofit::Bool) where T
+                     ω::Union{Vector,Nothing}, intercept::Bool, irls_tol::Real, dofit::Bool,
+                     allowrankdeficient::Bool) where T
     mu = isempty(offset) ? copy(y) : y + offset
+    X0 = nullX(X, intercept, ω)
+    allowrankdeficient = allowrankdeficient && size(X0,2) > 0
     nullmodel = LinearModel(LmResp{typeof(y)}(fill!(similar(y), 0), offset, wts, y),
-                            GLM.cholpred(nullX(X, intercept, ω), false))
+                            GLM.cholpred(X0, allowrankdeficient))
     fit!(nullmodel)
     nulldev = deviance(nullmodel)
     nullb0 = intercept ? coef(nullmodel)[1] : zero(T)
@@ -327,15 +330,23 @@ end
 function build_model(X::AbstractMatrix{T}, y::FPVector, d::UnivariateDistribution, l::Link,
                      lp::LinPred, λminratio::Real, λ::Union{AbstractVector,Function,Nothing},
                      wts::Union{FPVector,Nothing}, offset::Vector, α::Real, nλ::Int,
-                     ω::Union{Vector, Nothing}, intercept::Bool, irls_tol::Real, dofit::Bool) where T
+                     ω::Union{Vector, Nothing}, intercept::Bool, irls_tol::Real, dofit::Bool,
+                     allowrankdeficient::Bool) where T
     # Fit to find null deviance
     # Maybe we should reuse this GlmResp object?
-    nullmodel = fit(GeneralizedLinearModel, nullX(X, intercept, ω), y, d, l;
-                    wts=wts, offset=offset, rtol=irls_tol, dofit=dofit)
+    rr = GlmResp(y, d, l, offset, wts)
+    X0 = nullX(X, intercept, ω)
+    allowrankdeficient = allowrankdeficient && size(X0,2) > 0
+    nullmodel = GeneralizedLinearModel(rr, GLM.cholpred(X0, allowrankdeficient), false)
+    if dofit 
+        fit!(nullmodel; allowrankdeficient=allowrankdeficient, rtol=irls_tol)
+    end
+    # nullmodel = fit(GeneralizedLinearModel, nullX(X, intercept, ω), y, d, l;
+    #                 wts=wts, offset=offset, rtol=irls_tol, dofit=dofit)
     nulldev = deviance(nullmodel)
     nullb0 = intercept ? coef(nullmodel)[1] : zero(T)
 
-    λ = maxλ!(nullmodel, λ, X, λminratio, α, nλ, ω)
+    λ = maxλ!(nullmodel, λ, X0, λminratio, α, nλ, ω)
 
     rr = GlmResp(y, d, l, offset, wts)
     model = GeneralizedLinearModel(rr, lp, false)
@@ -468,6 +479,7 @@ function StatsBase.fit(::Type{LassoPath},
                        maxncoef::Int=min(size(X, 2), 2*size(X, 1)),
                        penalty_factor::Union{Vector,Nothing}=nothing,
                        standardizeω::Bool=true,
+                       allowrankdeficient::Bool=true,
                        fitargs...) where {T<:AbstractFloat,V<:FPVector}
     size(X, 1) == size(y, 1) || DimensionMismatch("number of rows in X and y must match")
     n = length(y)
@@ -489,7 +501,8 @@ function StatsBase.fit(::Type{LassoPath},
     # GLM response initialization
     autoλ = λ === nothing || isa(λ, Function)
     model, nulldev, nullb0, λ = build_model(X, y, d, l, cd, λminratio, λ, wts .* T(1/sum(wts)),
-                                            Vector{T}(offset), α, nλ, ω, intercept, irls_tol, dofit)
+                                            Vector{T}(offset), α, nλ, ω, intercept, 
+                                            irls_tol, dofit, allowrankdeficient)
 
     # Fit path
     path = LassoPath{typeof(model),T}(model, nulldev, nullb0, λ, autoλ, Xnorm)

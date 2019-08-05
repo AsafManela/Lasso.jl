@@ -56,3 +56,16 @@ datapath = joinpath(dirname(@__FILE__), "data")
 end
 
 end
+
+(family, dist, link) = ("gaussian", Normal(), IdentityLink())
+(family, dist, link) = ("binomial", Binomial(), LogitLink())
+data = CSV.read(joinpath(datapath,"gamlr.$family.data.csv"); header=[:y, :x1, :x2, :x3])
+offset = fill(0.001,length(data.y))
+L = LassoModel
+R = Lasso.pathtype(L)
+data.x12= 2*data.x1 + 3*data.x2
+(f,intercept) =  (@formula(y~x1+x2+x12+x3), true)
+path = fit(L, f, data, dist, link; intercept=intercept, offset=offset, allowrankdeficient=false)
+path1 = fit(L, f, data, dist, link; intercept=intercept, offset=offset, allowrankdeficient=true, penalty_factor=[0,0,0,1])
+coef(path)
+coef(path1)

@@ -69,6 +69,7 @@ function StatsBase.fit(::Type{GammaLassoPath},
                        maxncoef::Int=min(size(X, 2), 2*size(X, 1)),
                        penalty_factor::Union{Vector,Nothing}=nothing,
                        standardizeω::Bool=true,
+                       allowrankdeficient::Bool=true,
                        fitargs...) where {T<:AbstractFloat,V<:FPVector}
 
     size(X, 1) == size(y, 1) || DimensionMismatch("number of rows in X and y must match")
@@ -97,9 +98,10 @@ function StatsBase.fit(::Type{GammaLassoPath},
     cd = algorithm{T,intercept,typeof(X),typeof(coefitr),typeof(ω)}(X, α, maxncoef, 1e-7, coefitr, ω)
 
     # GLM response initialization
-    autoλ = λ == nothing
+    autoλ = λ === nothing
     model, nulldev, nullb0, λ = build_model(X, y, d, l, cd, λminratio, λ, wts .* T(1/sum(wts)),
-                                            Vector{T}(offset), α, nλ, penalty_factor, intercept, irls_tol, dofit)
+                                            Vector{T}(offset), α, nλ, penalty_factor, intercept, 
+                                            irls_tol, dofit, allowrankdeficient)
 
     # Fit path
     path = GammaLassoPath{typeof(model),T}(model, nulldev, nullb0, λ, autoλ, γ, penalty_factor, Xnorm)
