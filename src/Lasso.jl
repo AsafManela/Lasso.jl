@@ -311,7 +311,7 @@ function build_model(X::AbstractMatrix{T}, y::FPVector, d::Normal, l::IdentityLi
                      allowrankdeficient::Bool) where T
     mu = isempty(offset) ? copy(y) : y + offset
     X0 = nullX(X, intercept, ω)
-    allowrankdeficient = allowrankdeficient && size(X0,2) > 0
+    allowrankdeficient = allowrankdeficient && size(X0,2) > intercept
     nullmodel = LinearModel(LmResp{typeof(y)}(fill!(similar(y), 0), offset, wts, y),
                             GLM.cholpred(X0, allowrankdeficient))
     fit!(nullmodel)
@@ -333,20 +333,22 @@ function build_model(X::AbstractMatrix{T}, y::FPVector, d::UnivariateDistributio
                      ω::Union{Vector, Nothing}, intercept::Bool, irls_tol::Real, dofit::Bool,
                      allowrankdeficient::Bool) where T
     # Fit to find null deviance
-    # Maybe we should reuse this GlmResp object?
-    rr = GlmResp(y, d, l, offset, wts)
     X0 = nullX(X, intercept, ω)
-    allowrankdeficient = allowrankdeficient && size(X0,2) > 0
-    nullmodel = GeneralizedLinearModel(rr, GLM.cholpred(X0, allowrankdeficient), false)
-    if dofit 
-        fit!(nullmodel; allowrankdeficient=allowrankdeficient, rtol=irls_tol)
-    end
-    # nullmodel = fit(GeneralizedLinearModel, nullX(X, intercept, ω), y, d, l;
-    #                 wts=wts, offset=offset, rtol=irls_tol, dofit=dofit)
+    allowrankdeficient = allowrankdeficient && size(X0,2) > intercept
+    maxiter = 30 * (1+3*allowrankdeficient)
+    # Maybe we should reuse this GlmResp object?
+    # rr = GlmResp(y, d, l, offset, wts)
+    # nullmodel = GeneralizedLinearModel(rr, GLM.cholpred(X0, allowrankdeficient), false)
+    # if dofit
+    #     fit!(nullmodel; allowrankdeficient=allowrankdeficient, rtol=irls_tol)
+    # end
+    nullmodel = fit(GeneralizedLinearModel, X0, y, d, l;
+                    wts=wts, offset=offset, rtol=irls_tol, dofit=dofit,
+                    allowrankdeficient=allowrankdeficient, maxiter=maxiter)
     nulldev = deviance(nullmodel)
     nullb0 = intercept ? coef(nullmodel)[1] : zero(T)
 
-    λ = maxλ!(nullmodel, λ, X0, λminratio, α, nλ, ω)
+    λ = maxλ!(nullmodel, λ, X, λminratio, α, nλ, ω)
 
     rr = GlmResp(y, d, l, offset, wts)
     model = GeneralizedLinearModel(rr, lp, false)
@@ -359,8 +361,10 @@ defaultalgorithm(d::UnivariateDistribution, l::Link, n::Int, p::Int) = NaiveCoor
 
 # following glmnet rescale penalty factors to sum to the number of coefficients
 initpenaltyfactor(penalty_factor::Nothing,p::Int,::Bool) = nothing
-initpenaltyfactor(penalty_factor::Vector,p::Int,standardizeω::Bool) =
+function initpenaltyfactor(penalty_factor::Vector,p::Int,standardizeω::Bool)
+    @assert length(penalty_factor) == p "penalty_factor must be a p-vector where p=size(X,2)"
     standardizeω ? rescale(penalty_factor, p) : penalty_factor
+end
 
 # Standardize predictors if requested
 function standardizeX(X::AbstractMatrix{T}, standardize::Bool) where T
@@ -501,7 +505,7 @@ function StatsBase.fit(::Type{LassoPath},
     # GLM response initialization
     autoλ = λ === nothing || isa(λ, Function)
     model, nulldev, nullb0, λ = build_model(X, y, d, l, cd, λminratio, λ, wts .* T(1/sum(wts)),
-                                            Vector{T}(offset), α, nλ, ω, intercept, 
+                                            Vector{T}(offset), α, nλ, ω, intercept,
                                             irls_tol, dofit, allowrankdeficient)
 
     # Fit path

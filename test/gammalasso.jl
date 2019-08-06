@@ -47,7 +47,7 @@ Random.seed!(testrng, 6540)
                 glp = fit(GammaLassoPath, X, y, dist, link; γ=γ, stopearly=false,
                     λminratio=0.001, penalty_factor=penalty_factor, λ=λ,
                     rng=StableRNG(1337),
-                    standardize=false, standardizeω=false)
+                    standardize=false, standardizeω=false, allowrankdeficient=false)
 
                 # compare
                 @test true==issimilarhead(glp.λ,fittable[!, Symbol("fit.lambda")];rtol=rtol)
@@ -86,7 +86,7 @@ Random.seed!(testrng, 6540)
                     lp = fit(LassoPath, X, y, dist, link; stopearly=false,
                         λminratio=0.001, penalty_factor=penalty_factor, λ=λ,
                         rng=StableRNG(1337),
-                        standardize=false, standardizeω=false)
+                        standardize=false, standardizeω=false, allowrankdeficient=false)
                     @test glp.λ == lp.λ
                     @test glp.b0 ≈ lp.b0
                     @test glp.coefs ≈ lp.coefs
