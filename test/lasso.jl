@@ -279,90 +279,90 @@ end
 #     end
 # end
 
-(dist, link) = ((Normal(), IdentityLink()), (Binomial(), LogitLink()), (Poisson(), LogLink()))[3]
-sp = (false, true)[1]
-Random.seed!(1337)
-(X, y) = genrand(Float64, dist, link, 1000, 10, sp)
-yoff = randn(length(y))
-intercept = (false, true)[2]
-alpha = (1, 0.5)[1]
-nonone_penalty_factors = (false,true)[2]
-penalty_factor, penalty_factor_glmnet = gen_penalty_factors(X,nonone_penalty_factors)
-offset = Vector{Float64}[Float64[], yoff][1]
-# let y=y
-# First fit with GLMNet
-if isa(dist, Normal)
-    yp = isempty(offset) ? y : y + offset
-    ypstd = std(yp, corrected=false)
-    # glmnet does this on entry, which changes λ mappings, but not
-    # coefficients. Should we?
-    yp = yp ./ ypstd
-    !isempty(offset) && (offset = offset ./ ypstd)
-    global y = y ./ ypstd
-    g = glmnet(X, yp, dist, intercept=intercept, alpha=alpha, tol=10*eps(); penalty_factor=penalty_factor_glmnet)
-elseif isa(dist, Binomial)
-    yp = zeros(size(y, 1), 2)
-    yp[:, 1] = y .== 0
-    yp[:, 2] = y .== 1
-    g = glmnet(X, yp, dist, intercept=intercept, alpha=alpha, tol=10*eps(),
-               offsets=isempty(offset) ? zeros(length(y)) : offset; penalty_factor=penalty_factor_glmnet)
-else
-    g = glmnet(X, y, dist, intercept=intercept, alpha=alpha, tol=10*eps(),
-               offsets=isempty(offset) ? zeros(length(y)) : offset; penalty_factor=penalty_factor_glmnet)
-end
-gbeta = convert(Matrix{Float64}, g.betas)
-
-randomize = [false, true][1]
-niter = 0
-algorithm = (NaiveCoordinateDescent, CovarianceCoordinateDescent)[1]
-spfit = (true,false)[2]
-criterion = :coef
-#  for criterion in (:coef,:obj) # takes too long for travis
-#      @testset "criterion = $criterion" begin
-if criterion == :obj
-    irls_tol = 100*eps()
-    cd_tol = 100*eps()
-else
-    irls_tol = 10*eps()
-    cd_tol = 10*eps()
-end
-# Now fit with Lasso
-l = fit(LassoPath, spfit ? sparse(X) : X, y, dist, link,
-        λ=g.lambda, algorithm=algorithm, intercept=intercept,
-        cd_tol=cd_tol, irls_tol=irls_tol, criterion=criterion, randomize=randomize,
-        α=alpha, offset=offset, penalty_factor=penalty_factor)
-l = fit(LassoPath, spfit ? sparse(X) : X, y, dist, link,
-        offset=offset, penalty_factor=penalty_factor)
-
-X0, X0norm = Lasso.standardizeX(X[:,1:2], true)
-X0 = intercept ? [ones(size(X0,1)) X0] : X0
-glmallow = fit(GeneralizedLinearModel, X0, y, dist, link, offset=offset, allowrankdeficient=true, maxiter=30)
-glmdisallow = fit(GeneralizedLinearModel, X0, y, dist, link, offset=offset, allowrankdeficient=false, maxiter=30)
-dist = Poisson()
-glmallow = fit(GeneralizedLinearModel, X0, y, Poisson(), allowrankdeficient=true)
-glmdisallow = fit(GeneralizedLinearModel, X0, y, Poisson(), allowrankdeficient=false)
-@show glm0
-@show glm1
-glm0 = fit(LinearModel, spfit ? sparse(X0) : X0, y, true)
-
-rd = (l.coefs - gbeta)./gbeta
-rd[.!isfinite.(rd)] .= 0
-println("         coefs adiff = $(maximum(abs, l.coefs - gbeta)) rdiff = $(maximum(abs, rd))")
-rd = (l.b0 - g.a0)./g.a0
-rd[.!isfinite.(rd)] .= 0
-println("         b0    adiff = $(maximum(abs, l.b0 - g.a0)) rdiff = $(maximum(abs, rd))")
-if criterion==:obj
-    # nothing to compare results against at this point, we just make sure the code runs
-else
-    @test l.λ ≈ g.lambda rtol=5e-7
-    @test l.coefs ≈ gbeta rtol=5e-7
-    @test l.b0 ≈ g.a0 rtol=2e-5
-
-    # Ensure same number of iterations with all algorithms
-    if niter == 0
-        global niter = l.niter
-    else
-        @test abs(niter - l.niter) <= 10
-    end
-end
-[l.λ  g.lambda]
+# (dist, link) = ((Normal(), IdentityLink()), (Binomial(), LogitLink()), (Poisson(), LogLink()))[3]
+# sp = (false, true)[1]
+# Random.seed!(1337)
+# (X, y) = genrand(Float64, dist, link, 1000, 10, sp)
+# yoff = randn(length(y))
+# intercept = (false, true)[2]
+# alpha = (1, 0.5)[1]
+# nonone_penalty_factors = (false,true)[2]
+# penalty_factor, penalty_factor_glmnet = gen_penalty_factors(X,nonone_penalty_factors)
+# offset = Vector{Float64}[Float64[], yoff][1]
+# # let y=y
+# # First fit with GLMNet
+# if isa(dist, Normal)
+#     yp = isempty(offset) ? y : y + offset
+#     ypstd = std(yp, corrected=false)
+#     # glmnet does this on entry, which changes λ mappings, but not
+#     # coefficients. Should we?
+#     yp = yp ./ ypstd
+#     !isempty(offset) && (offset = offset ./ ypstd)
+#     global y = y ./ ypstd
+#     g = glmnet(X, yp, dist, intercept=intercept, alpha=alpha, tol=10*eps(); penalty_factor=penalty_factor_glmnet)
+# elseif isa(dist, Binomial)
+#     yp = zeros(size(y, 1), 2)
+#     yp[:, 1] = y .== 0
+#     yp[:, 2] = y .== 1
+#     g = glmnet(X, yp, dist, intercept=intercept, alpha=alpha, tol=10*eps(),
+#                offsets=isempty(offset) ? zeros(length(y)) : offset; penalty_factor=penalty_factor_glmnet)
+# else
+#     g = glmnet(X, y, dist, intercept=intercept, alpha=alpha, tol=10*eps(),
+#                offsets=isempty(offset) ? zeros(length(y)) : offset; penalty_factor=penalty_factor_glmnet)
+# end
+# gbeta = convert(Matrix{Float64}, g.betas)
+#
+# randomize = [false, true][1]
+# niter = 0
+# algorithm = (NaiveCoordinateDescent, CovarianceCoordinateDescent)[1]
+# spfit = (true,false)[2]
+# criterion = :coef
+# #  for criterion in (:coef,:obj) # takes too long for travis
+# #      @testset "criterion = $criterion" begin
+# if criterion == :obj
+#     irls_tol = 100*eps()
+#     cd_tol = 100*eps()
+# else
+#     irls_tol = 10*eps()
+#     cd_tol = 10*eps()
+# end
+# # Now fit with Lasso
+# l = fit(LassoPath, spfit ? sparse(X) : X, y, dist, link,
+#         λ=g.lambda, algorithm=algorithm, intercept=intercept,
+#         cd_tol=cd_tol, irls_tol=irls_tol, criterion=criterion, randomize=randomize,
+#         α=alpha, offset=offset, penalty_factor=penalty_factor)
+# l = fit(LassoPath, spfit ? sparse(X) : X, y, dist, link,
+#         offset=offset, penalty_factor=penalty_factor)
+#
+# X0, X0norm = Lasso.standardizeX(X[:,1:2], true)
+# X0 = intercept ? [ones(size(X0,1)) X0] : X0
+# glmallow = fit(GeneralizedLinearModel, X0, y, dist, link, offset=offset, allowrankdeficient=true, maxiter=30)
+# glmdisallow = fit(GeneralizedLinearModel, X0, y, dist, link, offset=offset, allowrankdeficient=false, maxiter=30)
+# dist = Poisson()
+# glmallow = fit(GeneralizedLinearModel, X0, y, Poisson(), allowrankdeficient=true)
+# glmdisallow = fit(GeneralizedLinearModel, X0, y, Poisson(), allowrankdeficient=false)
+# @show glm0
+# @show glm1
+# glm0 = fit(LinearModel, spfit ? sparse(X0) : X0, y, true)
+#
+# rd = (l.coefs - gbeta)./gbeta
+# rd[.!isfinite.(rd)] .= 0
+# println("         coefs adiff = $(maximum(abs, l.coefs - gbeta)) rdiff = $(maximum(abs, rd))")
+# rd = (l.b0 - g.a0)./g.a0
+# rd[.!isfinite.(rd)] .= 0
+# println("         b0    adiff = $(maximum(abs, l.b0 - g.a0)) rdiff = $(maximum(abs, rd))")
+# if criterion==:obj
+#     # nothing to compare results against at this point, we just make sure the code runs
+# else
+#     @test l.λ ≈ g.lambda rtol=5e-7
+#     @test l.coefs ≈ gbeta rtol=5e-7
+#     @test l.b0 ≈ g.a0 rtol=2e-5
+#
+#     # Ensure same number of iterations with all algorithms
+#     if niter == 0
+#         global niter = l.niter
+#     else
+#         @test abs(niter - l.niter) <= 10
+#     end
+# end
+# [l.λ  g.lambda]

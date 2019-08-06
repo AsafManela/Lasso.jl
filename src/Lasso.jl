@@ -335,7 +335,7 @@ function build_model(X::AbstractMatrix{T}, y::FPVector, d::UnivariateDistributio
     # Fit to find null deviance
     X0 = nullX(X, intercept, ω)
     allowrankdeficient = allowrankdeficient && size(X0,2) > intercept
-    maxiter = 30 * (1+3*allowrankdeficient)
+    maxiter = 30 * (1+9*allowrankdeficient)
     # Maybe we should reuse this GlmResp object?
     # rr = GlmResp(y, d, l, offset, wts)
     # nullmodel = GeneralizedLinearModel(rr, GLM.cholpred(X0, allowrankdeficient), false)
